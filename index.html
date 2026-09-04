@@ -118,6 +118,7 @@
   .week-btn:hover{border-color:var(--accent);}
   .week-btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
   .week-btn.is-active{border-color:var(--accent); background:var(--accent-soft);}
+  .week-btn.is-prelude{border-style:dashed;}
   .week-btn .ring{width:34px; height:34px;} .week-btn .ring::before{inset:3px;} .week-btn .ring-num{font-size:10px;}
   .week-btn-text{text-align:center; display:flex; flex-direction:column; gap:1px;}
   .week-btn-text strong{font-size:12.5px;}
@@ -238,7 +239,7 @@
     </div>
 
     <div class="start-box">
-      <label for="startInput">Ngày bắt đầu (Ngày 1)</label>
+      <label for="startInput">Ngày bắt đầu Tuần 1 (Thứ 2)</label>
       <input type="date" id="startInput">
       <span class="start-confirm" id="startConfirm"></span>
       <span class="start-info" id="startInfo"></span>
@@ -263,7 +264,7 @@
     <section class="panel" id="panel-schedule">
       <div class="panel-head">
         <h2>Lịch tập</h2>
-        <p>Chọn Ngày 1 để chương trình tính đúng ngày thật cho cả 100 ngày. Nhãn T2–CN chỉ vị trí trong chu kỳ 7 ngày (không phải đúng thứ thật) — ngày thật hiển thị riêng bên cạnh.</p>
+        <p>Tuần 0 là 2 buổi làm quen (T7, CN) dùng đúng bài của Tuần 1, trước khi Tuần 1 chính thức bắt đầu vào Thứ 2 tuần sau. T2–CN là thứ thật (T2 luôn là Thứ Hai...).</p>
       </div>
       <div class="callout"><b>Lưu ý hiện tại:</b>&nbsp;bắp tay đang đau sau chống đẩy — T7 ưu tiên thân dưới, chỉ quay lại thân trên khi đau đã hết hoặc rất nhẹ.</div>
       <div class="week-strip" id="weekStrip"></div>
@@ -545,9 +546,27 @@
   function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
   function addDays(d,n){ var nd=new Date(d); nd.setDate(nd.getDate()+n); return nd; }
   function todayMid(){ var t=new Date(); t.setHours(0,0,0,0); return t; }
-  function defaultStart(){ return addDays(todayMid(),1); }
+  function defaultStart(){
+    var t = todayMid();
+    var day = t.getDay();
+    var add = day===1 ? 0 : ((8-day)%7);
+    return addDays(t, add);
+  }
+  function toMonday(d){
+    var nd = new Date(d); nd.setHours(0,0,0,0);
+    var day = nd.getDay();
+    var diff = day===0 ? -6 : (1-day);
+    nd.setDate(nd.getDate()+diff);
+    return nd;
+  }
   function dateForDay(n){ return addDays(startDate, n-1); }
   function exId(day,i){ return 'd'+day+'e'+i; }
+  function preludeDate(idx){ return addDays(startDate, idx===0?-2:-1); }
+  function preludeContent(idx){
+    var slot = idx===0?5:6;
+    return {rest:false, s:SLOT_SESSION[slot], ex:buildDayExercises(0, slot)};
+  }
+  function preludeExId(idx,i){ return 'p'+idx+'e'+i; }
 
   function daysInWeek(w){
     var start=(w-1)*7+1, end=Math.min(w*7, TOTAL_DAYS);
@@ -556,8 +575,8 @@
   }
 
   function loadState(){
-    try{ var c=localStorage.getItem('d100_checks_v1'); checks = c?JSON.parse(c):{}; }catch(e){ checks={}; }
-    try{ var s=localStorage.getItem('d100_start_v1'); startDate = s? new Date(s+'T00:00:00') : null; }catch(e){ startDate=null; }
+    try{ var c=localStorage.getItem('d100_checks_v2'); checks = c?JSON.parse(c):{}; }catch(e){ checks={}; }
+    try{ var s=localStorage.getItem('d100_start_v2'); startDate = s? toMonday(new Date(s+'T00:00:00')) : null; }catch(e){ startDate=null; }
     if(!startDate || isNaN(startDate.getTime())) startDate = defaultStart();
     try{ var t=localStorage.getItem('d100_track_v1'); trackRows = t? JSON.parse(t) : null; }catch(e){ trackRows=null; }
     if(!trackRows){
@@ -565,8 +584,8 @@
       for(var w=1; w<=15; w++){ trackRows.push({date:'',weight:'',waist:'',pushups:'',plank:'',energy:'',sleep:'',soreness:'',note:''}); }
     }
   }
-  function saveChecks(){ try{ localStorage.setItem('d100_checks_v1', JSON.stringify(checks)); }catch(e){} }
-  function saveStart(){ try{ localStorage.setItem('d100_start_v1', ymd(startDate)); }catch(e){} }
+  function saveChecks(){ try{ localStorage.setItem('d100_checks_v2', JSON.stringify(checks)); }catch(e){} }
+  function saveStart(){ try{ localStorage.setItem('d100_start_v2', ymd(startDate)); }catch(e){} }
   function saveTrack(){ try{ localStorage.setItem('d100_track_v1', JSON.stringify(trackRows)); }catch(e){} }
 
   function dayProgress(day){
@@ -577,6 +596,14 @@
     return {total:c.ex.length, done:done};
   }
   function weekProgress(w){
+    if(w===0){
+      var total0=0, done0=0;
+      for(var idx=0; idx<2; idx++){
+        var c0 = preludeContent(idx);
+        for(var i0=0;i0<c0.ex.length;i0++){ total0++; if(checks[preludeExId(idx,i0)]) done0++; }
+      }
+      return {total:total0, done:done0};
+    }
     var total=0, done=0;
     var days = daysInWeek(w);
     for(var i=0;i<days.length;i++){ var p=dayProgress(days[i]); total+=p.total; done+=p.done; }
@@ -584,6 +611,7 @@
   }
   function overallProgress(){
     var total=0, done=0;
+    var p0 = weekProgress(0); total+=p0.total; done+=p0.done;
     for(var d=1; d<=TOTAL_DAYS; d++){ var p=dayProgress(d); total+=p.total; done+=p.done; }
     return {total:total, done:done};
   }
@@ -595,6 +623,13 @@
     var diff = Math.round((today-startDate)/86400000)+1;
     if(diff<1) diff=1; if(diff>TOTAL_DAYS) diff=TOTAL_DAYS;
     return diff;
+  }
+  function currentWeekSlot(){
+    var today = todayMid();
+    var diffDays = Math.round((today-startDate)/86400000);
+    var w = Math.floor(diffDays/7)+1;
+    if(w<0) w=0; if(w>15) w=15;
+    return w;
   }
 
   function renderHeader(){
@@ -610,11 +645,12 @@
 
     var today = todayMid();
     var infoEl = document.getElementById('startInfo');
-    var diffToStart = Math.round((startDate-today)/86400000);
-    if(diffToStart>0){
-      infoEl.textContent = 'Bắt đầu sau '+diffToStart+' ngày';
-    }else if(diffToStart===0){
-      infoEl.textContent = 'Bắt đầu hôm nay — Ngày 1';
+    var pStart = preludeDate(0), pEnd = preludeDate(1);
+    if(today < pStart){
+      var diffToPrelude = Math.round((pStart-today)/86400000);
+      infoEl.textContent = 'Bắt đầu sau '+diffToPrelude+' ngày ('+fmtFull(pStart)+', Tuần 0)';
+    }else if(today <= pEnd){
+      infoEl.textContent = 'Đang ở Tuần 0 (làm quen)';
     }else{
       var endProgram = addDays(startDate, TOTAL_DAYS-1);
       if(today>endProgram){
@@ -628,13 +664,15 @@
   function renderWeekStrip(){
     var el = document.getElementById('weekStrip');
     var html='';
-    for(var w=1; w<=15; w++){
+    for(var w=0; w<=15; w++){
       var p = weekProgress(w);
       var pct = p.total? Math.round(p.done/p.total*100):0;
-      var days = daysInWeek(w);
-      var start = dateForDay(days[0]), end = dateForDay(days[days.length-1]);
+      var start, end;
+      if(w===0){ start=preludeDate(0); end=preludeDate(1); }
+      else{ var days=daysInWeek(w); start=dateForDay(days[0]); end=dateForDay(days[days.length-1]); }
       var active = w===selectedWeek ? ' is-active':'';
-      html += '<button class="week-btn'+active+'" data-week="'+w+'" type="button">'
+      var prelude = w===0 ? ' is-prelude':'';
+      html += '<button class="week-btn'+active+prelude+'" data-week="'+w+'" type="button">'
         + '<span class="ring" style="--pct:'+pct+'"><span class="ring-num">'+pct+'%</span></span>'
         + '<span class="week-btn-text"><strong>Tuần '+w+'</strong><small>'+fmtShort(start)+'–'+fmtShort(end)+'</small></span>'
         + '</button>';
@@ -644,58 +682,91 @@
     for(var j=0;j<btns.length;j++){
       btns[j].addEventListener('click', function(){ selectedWeek=+this.dataset.week; renderAll(); });
     }
-    var goal = WEEK_SPECS[selectedWeek-1].goal;
-    var days2 = daysInWeek(selectedWeek);
-    document.getElementById('weekNote').textContent = 'Tuần '+selectedWeek+' (Ngày '+days2[0]+'–'+days2[days2.length-1]+') — giai đoạn: '+goal+'.';
+    var noteText;
+    if(selectedWeek===0){
+      noteText = 'Tuần 0: 2 buổi làm quen (T7 + CN) dùng đúng bài của Tuần 1, tính riêng tiến độ.';
+    }else{
+      var goal = WEEK_SPECS[selectedWeek-1].goal;
+      var days2 = daysInWeek(selectedWeek);
+      noteText = 'Tuần '+selectedWeek+' (Ngày '+days2[0]+'–'+days2[days2.length-1]+') — giai đoạn: '+goal+'.';
+    }
+    document.getElementById('weekNote').textContent = noteText;
+  }
+
+  function exRowsHtml(ex, idFn){
+    var rows='';
+    for(var i=0;i<ex.length;i++){
+      var e=ex[i];
+      var id=idFn(i);
+      var checked=!!checks[id];
+      var name=e[0], equip=e[1], work=e[2], rpe=e[3], note=e[4];
+      rows += '<label class="ex-row'+(checked?' is-done':'')+'">'
+        + '<input type="checkbox" data-id="'+id+'" '+(checked?'checked':'')+' />'
+        + '<span class="ex-check" aria-hidden="true"></span>'
+        + '<span class="ex-main"><span class="ex-name">'+esc(name)+'</span>'+(equip?'<span class="ex-equip">'+esc(equip)+'</span>':'')+'</span>'
+        + '<span class="ex-work">'+esc(work)+'</span>'
+        + '<span class="ex-rpe">'+esc(rpe)+'</span>'
+        + (note?'<span class="ex-note">'+esc(note)+'</span>':'<span class="ex-note"></span>')
+        + '</label>';
+    }
+    return rows;
+  }
+
+  function dayCardHtml(dayNumLabel, slot, date, isToday, content, idFn, allKey){
+    var head = '<div class="day-date">'+(dayNumLabel?'<span class="day-num-big">'+dayNumLabel+'</span>':'')
+      + '<span class="day-role">'+SLOT_LABELS[slot]+'</span><span class="day-cal">'+weekdayVN(date)+' · '+fmtShort(date)+'</span>'
+      + (isToday?'<span class="today-tag">Hôm nay</span>':'') + '</div>';
+    if(content.rest){
+      return '<div class="day-entry day-rest'+(isToday?' is-today':'')+'">'
+        + head
+        + '<div class="day-body"><span class="rest-tag">Nghỉ</span><p class="day-note">'+esc(content.note)+'</p></div>'
+        + '</div>';
+    }
+    var done=0;
+    for(var i=0;i<content.ex.length;i++){ if(checks[idFn(i)]) done++; }
+    var total=content.ex.length, allDone = total>0 && done===total;
+    var rows = exRowsHtml(content.ex, idFn);
+    return '<div class="day-entry'+(isToday?' is-today':'')+(allDone?' is-complete':'')+'">'
+      + head
+      + '<div class="day-body">'
+        + '<div class="day-head"><h3>'+esc(content.s)+'</h3>'
+          + '<label class="day-all"><input type="checkbox" data-allkey="'+allKey+'" '+(allDone?'checked':'')+' /><span>'+done+'/'+total+' hoàn thành</span></label>'
+        + '</div>'
+        + '<div class="ex-table">'+rows+'</div>'
+      + '</div>'
+      + '</div>';
   }
 
   function renderDays(){
     var el = document.getElementById('dayList');
-    var days = daysInWeek(selectedWeek);
     var today = todayMid();
     var html='';
-    for(var k=0;k<days.length;k++){
-      var day = days[k];
-      var slot = slotOf(day);
-      var date = dateForDay(day);
-      var isToday = sameDay(date, today);
-      var c = dayContent(day);
+    var allKeyMap = {};
 
-      if(c.rest){
-        html += '<div class="day-entry day-rest'+(isToday?' is-today':'')+'">'
-          + '<div class="day-date"><span class="day-num-big">Ngày '+day+'</span><span class="day-role">'+SLOT_LABELS[slot]+'</span><span class="day-cal">'+weekdayVN(date)+' · '+fmtShort(date)+'</span>'+(isToday?'<span class="today-tag">Hôm nay</span>':'')+'</div>'
-          + '<div class="day-body"><span class="rest-tag">Nghỉ</span><p class="day-note">'+esc(c.note)+'</p></div>'
-          + '</div>';
-        continue;
+    if(selectedWeek===0){
+      for(var idx=0; idx<2; idx++){
+        var slotP = idx===0?5:6;
+        var dateP = preludeDate(idx);
+        var isTodayP = sameDay(dateP, today);
+        var contentP = preludeContent(idx);
+        var idFnP = (function(ix){ return function(i){ return preludeExId(ix,i); }; })(idx);
+        var allKeyP = 'p'+idx;
+        allKeyMap[allKeyP] = {ex:contentP.ex, idFn:idFnP};
+        html += dayCardHtml(null, slotP, dateP, isTodayP, contentP, idFnP, allKeyP);
       }
-
-      var p = dayProgress(day);
-      var allDone = p.total>0 && p.done===p.total;
-      var rows='';
-      for(var i=0;i<c.ex.length;i++){
-        var ex = c.ex[i];
-        var id = exId(day,i);
-        var checked = !!checks[id];
-        var name=ex[0], equip=ex[1], work=ex[2], rpe=ex[3], note=ex[4];
-        rows += '<label class="ex-row'+(checked?' is-done':'')+'">'
-          + '<input type="checkbox" data-id="'+id+'" '+(checked?'checked':'')+' />'
-          + '<span class="ex-check" aria-hidden="true"></span>'
-          + '<span class="ex-main"><span class="ex-name">'+esc(name)+'</span>'+(equip?'<span class="ex-equip">'+esc(equip)+'</span>':'')+'</span>'
-          + '<span class="ex-work">'+esc(work)+'</span>'
-          + '<span class="ex-rpe">'+esc(rpe)+'</span>'
-          + (note?'<span class="ex-note">'+esc(note)+'</span>':'<span class="ex-note"></span>')
-          + '</label>';
+    } else {
+      var days = daysInWeek(selectedWeek);
+      for(var k=0;k<days.length;k++){
+        var day = days[k];
+        var slot = slotOf(day);
+        var date = dateForDay(day);
+        var isToday = sameDay(date, today);
+        var content = dayContent(day);
+        var idFn = (function(d){ return function(i){ return exId(d,i); }; })(day);
+        var allKey = 'd'+day;
+        allKeyMap[allKey] = {ex:content.ex, idFn:idFn};
+        html += dayCardHtml('Ngày '+day, slot, date, isToday, content, idFn, allKey);
       }
-
-      html += '<div class="day-entry'+(isToday?' is-today':'')+(allDone?' is-complete':'')+'">'
-        + '<div class="day-date"><span class="day-num-big">Ngày '+day+'</span><span class="day-role">'+SLOT_LABELS[slot]+'</span><span class="day-cal">'+weekdayVN(date)+' · '+fmtShort(date)+'</span>'+(isToday?'<span class="today-tag">Hôm nay</span>':'')+'</div>'
-        + '<div class="day-body">'
-          + '<div class="day-head"><h3>'+esc(c.s)+'</h3>'
-            + '<label class="day-all"><input type="checkbox" data-allday="'+day+'" '+(allDone?'checked':'')+' /><span>'+p.done+'/'+p.total+' hoàn thành</span></label>'
-          + '</div>'
-          + '<div class="ex-table">'+rows+'</div>'
-        + '</div>'
-        + '</div>';
     }
     el.innerHTML = html;
 
@@ -707,13 +778,12 @@
         saveChecks(); renderAll();
       });
     }
-    var allInputs = el.querySelectorAll('input[data-allday]');
+    var allInputs = el.querySelectorAll('input[data-allkey]');
     for(var n=0;n<allInputs.length;n++){
       allInputs[n].addEventListener('change', function(){
-        var day = +this.dataset.allday;
-        var c = dayContent(day);
-        for(var i=0;i<c.ex.length;i++){
-          var id = exId(day,i);
+        var info = allKeyMap[this.dataset.allkey];
+        for(var i=0;i<info.ex.length;i++){
+          var id = info.idFn(i);
           if(this.checked) checks[id]=true; else delete checks[id];
         }
         saveChecks(); renderAll();
@@ -832,10 +902,10 @@
     document.getElementById('startInput').addEventListener('change', function(e){
       var v=e.target.value; if(!v) return;
       var d = new Date(v+'T00:00:00'); if(isNaN(d.getTime())) return;
-      startDate = d; saveStart(); renderAll();
+      startDate = toMonday(d); saveStart(); renderAll();
     });
     document.getElementById('gotoToday').addEventListener('click', function(){
-      selectedWeek = weekOf(currentDay()); renderAll();
+      selectedWeek = currentWeekSlot(); renderAll();
     });
     var resetBtn = document.getElementById('resetBtn');
     resetBtn.addEventListener('click', function(){
@@ -853,7 +923,7 @@
 
   function init(){
     loadState();
-    selectedWeek = weekOf(currentDay());
+    selectedWeek = currentWeekSlot();
     initTabs(); initControls();
     renderAll();
     renderPhases();
